@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>投資組合追蹤</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    input, button { margin: 5px; }
+  </style>
+</head>
+<body>
+  <h1>我的投資組合</h1>
+  <form id="asset-form">
+    <input name="name" placeholder="名稱">
+    <input name="symbol" placeholder="代碼">
+    <input name="type" placeholder="類型">
+    <input name="buy_price" placeholder="買入價" type="number">
+    <input name="quantity" placeholder="數量" type="number">
+    <button type="submit">新增資產</button>
+  </form>
+  <canvas id="pieChart" width="400" height="400"></canvas>
+  <div id="assets"></div>
+
+  <hr><h2>交易記錄</h2>
+  <form id="txn-form">
+    <input name="asset_id" placeholder="資產ID" type="number">
+    <input name="action" placeholder="操作(買/賣)">
+    <input name="price" placeholder="價格" type="number">
+    <input name="quantity" placeholder="數量" type="number">
+    <input name="date" placeholder="日期(YYYY-MM-DD)">
+    <button type="submit">新增交易</button>
+  </form>
+  <div id="transactions"></div>
+
+  <script>
+    async function loadAssets() {
+      const res = await fetch("/assets");
+      const assets = await res.json();
+      const container = document.getElementById("assets");
+      const pieData = [];
+      container.innerHTML = "";
+      for (const asset of assets) {
+        const res = await fetch(`/price/${asset.symbol}`);
+        const priceData = await res.json();
+        const current = priceData.price || Object.values(priceData)[0].usd;
+        const value = current * asset.quantity;
+        container.innerHTML += `<p>${asset.name} (${asset.symbol})：買入價 ${asset.buy_price}，現價 ${current}，持有 ${asset.quantity}，總值 ${value.toFixed(2)}</p>`;
+        pieData.push({ label: asset.name, value: value });
+      }
+      drawPie(pieData);
+    }
+
+    async function loadTransactions() {
+      const res = await fetch("/transactions");
+      const txns = await res.json();
+      const container = document.getElementById("transactions");
+      container.innerHTML = "";
+      for (const t of txns) {
+        container.innerHTML += `<p>資產ID: ${t.asset_id} | ${t.action} ${t.quantity} 單位 @ ${t.price} on ${t.date}</p>`;
+      }
+    }
+
+    document.getElementById("asset-form").onsubmit = async function(e) {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target));
+      await fetch("/assets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      loadAssets();
+    };
+
+    document.getElementById("txn-form").onsubmit = async function(e) {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target));
+      await fetch("/transactions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      loadTransactions();
+    };
+
+    function drawPie(data) {
+      const ctx = document.getElementById('pieChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: data.map(d => d.label),
+          datasets: [{ data: data.map(d => d.value), backgroundColor: ['#36A2EB', '#FF6384', '#FFCE56', '#8BC34A'] }]
+        }
+      });
+    }
+
+    loadAssets();
+    loadTransactions();
+  </script>
+</body>
+</html>
